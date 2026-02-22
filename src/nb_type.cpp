@@ -2007,33 +2007,44 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
     nb_internals *internals_ = internals;
 
     // Look up the corresponding Python type
-    type_data *td = nb_type_c2p(internals_, cpp_type),
+    type_data *td = nullptr,
               *td_p = nullptr;
+    void *value_p = nullptr;
+    bool value_p_valid = false;
 
-    if (!td)
-        return nullptr;
+    auto lookup_type = [cpp_type, cpp_type_p, value, internals_,
+                        &td, &td_p, &value_p, &value_p_valid]() -> bool {
+        if (!td) {
+            type_data *d = nb_type_c2p(internals_, cpp_type);
+            if (!d)
+                return false;
+            td = d;
 
-    if (cpp_type_p && cpp_type_p != cpp_type)
-        td_p = nb_type_c2p(internals_, cpp_type_p);
+            if (cpp_type_p && cpp_type_p != cpp_type) {
+                td_p = nb_type_c2p(internals_, cpp_type_p);
+                if (td_p)
+                    value_p_valid =
+                        nb_type_apply_cast(cpp_type, td_p->type, value, &value_p);
+            }
+        }
 
-    type_data *td_target = td_p ? td_p : td;
-    void *value_target = value;
-
-    if (td_target != td) {
-        void *value_cast = nullptr;
-        if (nb_type_apply_cast(cpp_type, td_target->type, value, &value_cast))
-            value_target = value_cast;
-    }
+        return true;
+    };
 
     if (rvp != rv_policy::copy) {
-        nb_shard &shard = internals_->shard(value_target);
-        lock_shard guard(shard);
+        bool error = false;
 
-        // Check if the instance is already registered with nanobind
-        nb_ptr_map &inst_c2p = shard.inst_c2p;
-        nb_ptr_map::iterator it = inst_c2p.find(value_target);
+        auto probe = [&](void *probe_value) -> PyObject * {
+            nb_shard &shard = internals_->shard(probe_value);
+            lock_shard guard(shard);
 
-        if (it != inst_c2p.end()) {
+            // Check if the instance is already registered with nanobind
+            nb_ptr_map &inst_c2p = shard.inst_c2p;
+            nb_ptr_map::iterator it = inst_c2p.find(probe_value);
+
+            if (it == inst_c2p.end())
+                return nullptr;
+
             void *entry = it->second;
             nb_inst_seq seq;
 
@@ -2054,6 +2065,11 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
                         return seq.inst;
                 }
 
+                if (!lookup_type()) {
+                    error = true;
+                    return nullptr;
+                }
+
                 if (PyType_IsSubtype(tp, td->type_py) ||
                     (td_p && PyType_IsSubtype(tp, td_p->type_py))) {
                     if (nb_try_inc_ref(seq.inst))
@@ -2065,10 +2081,39 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
 
                 seq = *seq.next;
             }
-        } else if (rvp == rv_policy::none) {
+
             return nullptr;
+        };
+
+        if (PyObject *inst = probe(value))
+            return inst;
+
+        if (error)
+            return nullptr;
+
+        if (!lookup_type())
+            return nullptr;
+
+        if (td_p && value_p_valid && value_p != value) {
+            if (PyObject *inst = probe(value_p))
+                return inst;
+
+            if (error)
+                return nullptr;
         }
+
+        if (rvp == rv_policy::none)
+            return nullptr;
     }
+
+    if (!lookup_type())
+        return nullptr;
+
+    type_data *td_target = td_p ? td_p : td;
+    void *value_target = value;
+
+    if (td_p && value_p_valid)
+        value_target = value_p;
 
     return nb_type_put_common(value_target, td_target, rvp, cleanup, is_new);
 }
