@@ -1,4 +1,11 @@
+import gc
+
+import pytest
 import test_multiple_inheritance_ext as t
+
+
+def _collect():
+    gc.collect()
 
 
 def test_cpp_declared_mi_issubclass():
@@ -93,3 +100,79 @@ def test_mi_base_return():
     e2 = t.i801e_b2()
     assert type(e2) is t.I801B2
     assert e2.b == 2
+
+
+def test_mi_lifetime_raw_take_ownership():
+    t.mi_tracked_reset()
+
+    obj1 = t.new_tracked_raw_base1()
+    assert type(obj1) is t.MITrackedDerived
+    assert t.mi_tracked_as_base1_marker(obj1) == 2011
+    assert t.mi_tracked_as_base2_value(obj1) == 11
+    assert t.mi_tracked_live() == 1
+    assert t.mi_tracked_destruct() == 0
+
+    obj2 = t.new_tracked_raw_base2()
+    assert type(obj2) is t.MITrackedDerived
+    assert t.mi_tracked_as_base1_marker(obj2) == 2012
+    assert t.mi_tracked_as_base2_value(obj2) == 12
+    assert t.mi_tracked_live() == 2
+    assert t.mi_tracked_destruct() == 0
+
+    del obj1, obj2
+    _collect()
+    assert t.mi_tracked_live() == 0
+    assert t.mi_tracked_destruct() == 2
+
+
+def test_mi_lifetime_unique_ptr_consume_once():
+    t.mi_tracked_reset()
+
+    obj1 = t.new_tracked_unique_base1()
+    assert type(obj1) is t.MITrackedDerived
+    assert t.mi_tracked_as_base1_marker(obj1) == 2021
+    assert t.mi_tracked_as_base2_value(obj1) == 21
+    assert t.mi_tracked_live() == 1
+
+    assert t.consume_tracked_unique_base1(obj1) == 2021
+    assert t.mi_tracked_live() == 0
+    assert t.mi_tracked_destruct() == 1
+
+    with pytest.warns(RuntimeWarning, match="relinquished instance"):
+        with pytest.raises(TypeError):
+            t.consume_tracked_unique_base1(obj1)
+
+    obj2 = t.new_tracked_unique_base2()
+    assert type(obj2) is t.MITrackedDerived
+    assert t.mi_tracked_as_base1_marker(obj2) == 2022
+    assert t.mi_tracked_as_base2_value(obj2) == 22
+    assert t.consume_tracked_unique_base2(obj2) == 22
+    assert t.mi_tracked_live() == 0
+    assert t.mi_tracked_destruct() == 2
+
+
+def test_mi_lifetime_shared_ptr_paths():
+    t.mi_tracked_reset()
+
+    obj1 = t.new_tracked_shared_base1()
+    assert type(obj1) is t.MITrackedDerived
+    assert t.mi_tracked_as_base1_marker(obj1) == 2031
+    assert t.mi_tracked_as_base2_value(obj1) == 31
+    assert t.consume_tracked_shared_base1(obj1) == 2031
+    assert t.consume_tracked_shared_base2(obj1) == 31
+    assert t.mi_tracked_live() == 1
+    assert t.mi_tracked_destruct() == 0
+
+    obj2 = t.new_tracked_shared_base2()
+    assert type(obj2) is t.MITrackedDerived
+    assert t.mi_tracked_as_base1_marker(obj2) == 2032
+    assert t.mi_tracked_as_base2_value(obj2) == 32
+    assert t.consume_tracked_shared_base1(obj2) == 2032
+    assert t.consume_tracked_shared_base2(obj2) == 32
+    assert t.mi_tracked_live() == 2
+    assert t.mi_tracked_destruct() == 0
+
+    del obj1, obj2
+    _collect()
+    assert t.mi_tracked_live() == 0
+    assert t.mi_tracked_destruct() == 2

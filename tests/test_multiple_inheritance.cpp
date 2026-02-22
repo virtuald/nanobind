@@ -1,5 +1,9 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/multiple_inheritance.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/unique_ptr.h>
+
+#include <memory>
 
 namespace nb = nanobind;
 
@@ -33,6 +37,46 @@ struct MIDerived : MIType {
     explicit MIDerived(int value = 0) : MIType(value) { }
     virtual ~MIDerived() = default;
     const char *cpp_derived() const { return "mi_derived"; }
+};
+
+// Lifetime/ownership fixture for MI pointer adjustments through holder paths.
+struct MITrackedBase1 {
+    virtual ~MITrackedBase1() = default;
+    virtual int marker() const = 0;
+};
+
+struct MITrackedBase2 : MITrackedBase1 {
+    explicit MITrackedBase2(int value = 0) : value(value) { }
+    virtual ~MITrackedBase2() = default;
+    int get_value() const { return value; }
+
+    int value;
+};
+
+struct MITrackedPad {
+    virtual ~MITrackedPad() = default;
+    int pad = 123;
+};
+
+struct MITracked : MITrackedPad, MITrackedBase2 {
+    explicit MITracked(int value = 0) : MITrackedBase2(value) { live_count++; }
+    ~MITracked() override {
+        live_count--;
+        destruct_count++;
+    }
+    int marker() const override { return 1000 + value; }
+
+    static int live_count;
+    static int destruct_count;
+};
+
+int MITracked::live_count = 0;
+int MITracked::destruct_count = 0;
+
+struct MITrackedDerived : MITracked {
+    explicit MITrackedDerived(int value = 0) : MITracked(value) { }
+    ~MITrackedDerived() override = default;
+    int marker() const override { return 2000 + value; }
 };
 
 // pybind11 Issue #801-compatible fixtures (adapted)
@@ -99,6 +143,57 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
     m.def("new_mitype_as_base2", []() -> Base2 * { return new MIType(102); });
     m.def("new_miderived_as_base1", []() -> Base1 * { return new MIDerived(201); });
     m.def("new_miderived_as_base2", []() -> Base2 * { return new MIDerived(202); });
+
+    nb::class_<MITrackedBase1>(m, "MITrackedBase1")
+        .def("marker", &MITrackedBase1::marker);
+
+    nb::class_<MITrackedBase2, MITrackedBase1>(m, "MITrackedBase2")
+        .def_prop_ro("value", &MITrackedBase2::get_value);
+
+    nb::mi::class_<MITracked, MITrackedBase2, MITrackedBase1>(m, "MITracked")
+        .def(nb::init<int>(), nb::arg("value") = 0);
+
+    nb::mi::class_<MITrackedDerived, MITracked>(m, "MITrackedDerived")
+        .def(nb::init<int>(), nb::arg("value") = 0);
+
+    m.def("mi_tracked_reset", []() {
+        MITracked::live_count = 0;
+        MITracked::destruct_count = 0;
+    });
+    m.def("mi_tracked_live", []() { return MITracked::live_count; });
+    m.def("mi_tracked_destruct", []() { return MITracked::destruct_count; });
+
+    m.def("mi_tracked_as_base1_marker", [](MITrackedBase1 *p) { return p->marker(); });
+    m.def("mi_tracked_as_base2_value", [](MITrackedBase2 *p) { return p->get_value(); });
+
+    m.def("new_tracked_raw_base1", []() -> MITrackedBase1 * { return new MITrackedDerived(11); });
+    m.def("new_tracked_raw_base2", []() -> MITrackedBase2 * { return new MITrackedDerived(12); });
+
+    m.def("new_tracked_unique_base1",
+          []() -> std::unique_ptr<MITrackedBase1> {
+              return std::unique_ptr<MITrackedBase1>(new MITrackedDerived(21));
+          });
+    m.def("new_tracked_unique_base2",
+          []() -> std::unique_ptr<MITrackedBase2> {
+              return std::unique_ptr<MITrackedBase2>(new MITrackedDerived(22));
+          });
+    m.def("consume_tracked_unique_base1",
+          [](std::unique_ptr<MITrackedBase1> p) { return p ? p->marker() : 0; });
+    m.def("consume_tracked_unique_base2",
+          [](std::unique_ptr<MITrackedBase2> p) { return p ? p->get_value() : -1; });
+
+    m.def("new_tracked_shared_base1",
+          []() -> std::shared_ptr<MITrackedBase1> {
+              return std::make_shared<MITrackedDerived>(31);
+          });
+    m.def("new_tracked_shared_base2",
+          []() -> std::shared_ptr<MITrackedBase2> {
+              return std::make_shared<MITrackedDerived>(32);
+          });
+    m.def("consume_tracked_shared_base1",
+          [](std::shared_ptr<MITrackedBase1> p) { return p ? p->marker() : 0; });
+    m.def("consume_tracked_shared_base2",
+          [](std::shared_ptr<MITrackedBase2> p) { return p ? p->get_value() : -1; });
 
     nb::class_<I801B1>(m, "I801B1")
         .def(nb::init<>())
