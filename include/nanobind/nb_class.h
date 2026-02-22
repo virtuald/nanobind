@@ -73,6 +73,9 @@ enum class type_flags : uint32_t {
 /// for more efficient memory layout, but could move elsewhere if we run
 /// out of flags.
 enum class type_init_flags : uint32_t {
+    /// Is the 'extra_bases' field of the type_init_data structure set?
+    has_extra_bases          = (1 << 18),
+
     /// Is the 'supplement' field of the type_init_data structure set?
     has_supplement           = (1 << 19),
 
@@ -88,7 +91,7 @@ enum class type_init_flags : uint32_t {
     /// This type provides extra PyType_Slot fields
     has_type_slots           = (1 << 23),
 
-    all_init_flags           = (0x1f << 19)
+    all_init_flags           = (0x3f << 18)
 };
 
 // See internals.h
@@ -136,6 +139,8 @@ struct type_data {
 struct type_init_data : type_data {
     PyObject *scope;
     const std::type_info *base;
+    const std::type_info *const *extra_bases;
+    size_t extra_bases_count;
     PyTypeObject *base_py;
     const char *doc;
     const PyType_Slot *type_slots;
@@ -566,6 +571,8 @@ public:
         d.name = name;
         d.scope = scope.ptr();
         d.type = &typeid(T);
+        d.extra_bases = nullptr;
+        d.extra_bases_count = 0;
 
         if constexpr (!std::is_same_v<Base, T>) {
             d.base = &typeid(Base);
@@ -619,7 +626,8 @@ public:
             };
         }
 
-        (detail::type_extra_apply(d, extra), ...);
+        using detail::type_extra_apply;
+        (type_extra_apply(d, extra), ...);
 
         m_ptr = detail::nb_type_new(&d);
     }
