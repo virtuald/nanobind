@@ -17,3 +17,10 @@ def test_cpp_declared_mi_method_dispatch():
     assert obj.base1() == "base1"
     assert obj.base2() == "base2"
     assert obj.cpp() == "mi"
+
+
+def test_pass_as_base2_pointer_adjustment():
+    obj = t.MIType(123)
+    assert obj.value == 123
+    assert t.pass_as_base2_value(obj) == 123
+    assert t.pass_as_base2_method(obj) == "base2"
