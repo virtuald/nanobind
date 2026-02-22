@@ -81,6 +81,7 @@ set(TEST_NAMES
   issue
   intrusive
   thread
+  multiple_inheritance
 )
 
 foreach (NAME ${TEST_NAMES})
@@ -166,6 +167,7 @@ set(TEST_FILES
   test_holders.py
   test_inter_module.py
   test_intrusive.py
+  test_multiple_inheritance.py
   test_make_iterator.py
   test_stl.py
   test_stl_bind_map.py
