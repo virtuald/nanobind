@@ -2007,30 +2007,31 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
     nb_internals *internals_ = internals;
 
     // Look up the corresponding Python type
-    type_data *td = nullptr,
+    type_data *td = nb_type_c2p(internals_, cpp_type),
               *td_p = nullptr;
 
-    auto lookup_type = [cpp_type, cpp_type_p, internals_, &td, &td_p]() -> bool {
-        if (!td) {
-            type_data *d = nb_type_c2p(internals_, cpp_type);
-            if (!d)
-                return false;
-            td = d;
+    if (!td)
+        return nullptr;
 
-            if (cpp_type_p && cpp_type_p != cpp_type)
-                td_p = nb_type_c2p(internals_, cpp_type_p);
-        }
+    if (cpp_type_p && cpp_type_p != cpp_type)
+        td_p = nb_type_c2p(internals_, cpp_type_p);
 
-        return true;
-    };
+    type_data *td_target = td_p ? td_p : td;
+    void *value_target = value;
+
+    if (td_target != td) {
+        void *value_cast = nullptr;
+        if (nb_type_apply_cast(cpp_type, td_target->type, value, &value_cast))
+            value_target = value_cast;
+    }
 
     if (rvp != rv_policy::copy) {
-        nb_shard &shard = internals_->shard(value);
+        nb_shard &shard = internals_->shard(value_target);
         lock_shard guard(shard);
 
         // Check if the instance is already registered with nanobind
         nb_ptr_map &inst_c2p = shard.inst_c2p;
-        nb_ptr_map::iterator it = inst_c2p.find(value);
+        nb_ptr_map::iterator it = inst_c2p.find(value_target);
 
         if (it != inst_c2p.end()) {
             void *entry = it->second;
@@ -2053,9 +2054,6 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
                         return seq.inst;
                 }
 
-                if (!lookup_type())
-                    return nullptr;
-
                 if (PyType_IsSubtype(tp, td->type_py) ||
                     (td_p && PyType_IsSubtype(tp, td_p->type_py))) {
                     if (nb_try_inc_ref(seq.inst))
@@ -2072,11 +2070,7 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
         }
     }
 
-    // Look up the corresponding Python type if not already done
-    if (!lookup_type())
-        return nullptr;
-
-    return nb_type_put_common(value, td_p ? td_p : td, rvp, cleanup, is_new);
+    return nb_type_put_common(value_target, td_target, rvp, cleanup, is_new);
 }
 
 static void nb_type_put_unique_finalize(PyObject *o,
