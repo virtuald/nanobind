@@ -57,6 +57,8 @@ NB_INLINE void mi_register_cast_pairs() {
 
 namespace mi {
 
+/// Opt-in MI API (v1): include <nanobind/multiple_inheritance.h> and use
+/// nb::mi::class_. The default nb::class_ path is unchanged.
 template <typename... Bases> struct bases { };
 
 template <typename T, typename B1, typename... Bn>

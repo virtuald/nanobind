@@ -176,3 +176,11 @@ def test_mi_lifetime_shared_ptr_paths():
     _collect()
     assert t.mi_tracked_live() == 0
     assert t.mi_tracked_destruct() == 2
+
+
+def test_multiple_inheritance_python_deferred_v1():
+    pytest.skip("v1 limitation: no Python-defined MI across multiple nanobind extension bases")
+
+
+def test_multiple_inheritance_virtbase_deferred_v1():
+    pytest.skip("v1 limitation: no virtual inheritance support")
