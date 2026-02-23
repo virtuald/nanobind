@@ -1174,7 +1174,6 @@ static PyMethodDef class_getitem_method[] = {
 PyObject *nb_type_new(const type_init_data *t) noexcept {
     bool has_doc               = t->flags & (uint32_t) type_init_flags::has_doc,
          has_base              = t->flags & (uint32_t) type_init_flags::has_base,
-         has_extra_bases       = t->flags & (uint32_t) type_init_flags::has_extra_bases,
          has_base_py           = t->flags & (uint32_t) type_init_flags::has_base_py,
          has_type_slots        = t->flags & (uint32_t) type_init_flags::has_type_slots,
          has_supplement        = t->flags & (uint32_t) type_init_flags::has_supplement,
@@ -1239,7 +1238,6 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
         basicsize += t->align - ptr_size;
 
     PyObject *base = nullptr;
-    object bases;
 
 #if !defined(PYPY_VERSION) // see https://github.com/pypy/pypy/issues/4914
     bool generic_base = false;
@@ -1248,10 +1246,6 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
         check(!has_base,
               "nanobind::detail::nb_type_new(\"%s\"): multiple base types "
               "specified!", t_name);
-        check(!has_extra_bases,
-              "nanobind::detail::nb_type_new(\"%s\"): extra C++ base types "
-              "cannot be combined with a Python base annotation!", t_name);
-
         base = (PyObject *) t->base_py;
 
 #if !defined(PYPY_VERSION) // see https://github.com/pypy/pypy/issues/4914
@@ -1271,8 +1265,8 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
         lock_internals guard(internals_);
         nb_type_map_slow::iterator it2 = internals_->type_c2p_slow.find(t->base);
         check(it2 != internals_->type_c2p_slow.end(),
-              "nanobind::detail::nb_type_new(\"%s\"): base type \"%s\" not "
-              "known to nanobind!", t_name, type_name(t->base));
+                  "nanobind::detail::nb_type_new(\"%s\"): base type \"%s\" not "
+                  "known to nanobind!", t_name, type_name(t->base));
         base = (PyObject *) it2->second->type_py;
     }
 
@@ -1312,41 +1306,6 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
         } while (true);
     }
 
-    if (has_extra_bases) {
-        check(t->extra_bases && t->extra_bases_count > 0,
-              "nanobind::detail::nb_type_new(\"%s\"): invalid extra C++ base metadata!", t_name);
-
-        size_t base_count = t->extra_bases_count + (base ? 1 : 0);
-        bases = steal(PyTuple_New((Py_ssize_t) base_count));
-        check(bases.is_valid(),
-              "nanobind::detail::nb_type_new(\"%s\"): could not allocate base tuple!", t_name);
-
-        size_t index = 0;
-        if (base) {
-            Py_INCREF(base);
-            NB_TUPLE_SET_ITEM(bases.ptr(), (Py_ssize_t) index++, base);
-        }
-
-        lock_internals guard(internals_);
-        for (size_t i = 0; i < t->extra_bases_count; ++i) {
-            const std::type_info *extra = t->extra_bases[i];
-            nb_type_map_slow::iterator it2 = internals_->type_c2p_slow.find(extra);
-            check(it2 != internals_->type_c2p_slow.end(),
-                  "nanobind::detail::nb_type_new(\"%s\"): extra base type \"%s\" "
-                  "not known to nanobind!", t_name, type_name(extra));
-
-            type_data *tb_extra = it2->second;
-            if (tb_extra->flags & (uint32_t) type_flags::has_dynamic_attr)
-                has_dynamic_attr = true;
-            if (tb_extra->flags & (uint32_t) type_flags::is_weak_referenceable)
-                is_weak_referenceable = true;
-
-            PyObject *base_extra_py = (PyObject *) tb_extra->type_py;
-            Py_INCREF(base_extra_py);
-            NB_TUPLE_SET_ITEM(bases.ptr(), (Py_ssize_t) index++, base_extra_py);
-        }
-    }
-
     bool base_intrusive_ptr =
         tb && (tb->flags & (uint32_t) type_flags::intrusive_ptr);
 
@@ -1372,8 +1331,6 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
 
     if (base)
         *s++ = { Py_tp_base, (void *) base };
-    if (bases.is_valid())
-        *s++ = { Py_tp_bases, (void *) bases.ptr() };
 
     *s++ = { Py_tp_init, (void *) inst_init };
     *s++ = { Py_tp_new, (void *) inst_new_int };

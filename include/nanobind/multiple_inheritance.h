@@ -18,16 +18,37 @@ NAMESPACE_BEGIN(NB_NAMESPACE)
 
 namespace detail {
 
-template <typename... Bases> struct mi_extra_bases { };
+struct mi_type_slots {
+    object bases;
+    PyType_Slot slots[2];
+
+    NB_INLINE mi_type_slots(object &&bases) : bases((object &&) bases) {
+        slots[0] = PyType_Slot{ Py_tp_bases, this->bases.ptr() };
+        slots[1] = PyType_Slot{ 0, nullptr };
+    }
+};
+
+NB_INLINE void type_extra_apply(type_init_data &t, const mi_type_slots &mts) {
+    t.flags |= (uint32_t) type_init_flags::has_type_slots;
+    t.type_slots = mts.slots;
+}
 
 template <typename... Bases>
-NB_INLINE void type_extra_apply(type_init_data &t, mi_extra_bases<Bases...>) {
-    if constexpr (sizeof...(Bases) > 0) {
-        static const std::type_info *extra_bases[] = { &typeid(Bases)... };
-        t.flags |= (uint32_t) type_init_flags::has_extra_bases;
-        t.extra_bases = extra_bases;
-        t.extra_bases_count = sizeof...(Bases);
-    }
+NB_INLINE mi_type_slots mi_make_type_slots() {
+    object bases = steal(PyTuple_New((Py_ssize_t) sizeof...(Bases)));
+    if (!bases.is_valid())
+        raise("nanobind::mi::class_: could not allocate base tuple!");
+
+    size_t index = 0;
+    ([&] {
+        PyObject *base = nb_type_lookup(&typeid(Bases));
+        if (!base)
+            raise("nanobind::mi::class_: one of the base types is not known to nanobind!");
+        Py_INCREF(base);
+        NB_TUPLE_SET_ITEM(bases.ptr(), (Py_ssize_t) index++, base);
+    }(), ...);
+
+    return mi_type_slots((object &&) bases);
 }
 
 template <typename Derived, typename Base>
@@ -68,7 +89,7 @@ class class_ : public nanobind::class_<T, B1> {
 public:
     template <typename... Extra>
     NB_INLINE class_(handle scope, const char *name, const Extra &... extra)
-        : Base(scope, name, detail::mi_extra_bases<Bn...>{}, extra...) {
+        : Base(scope, name, detail::mi_make_type_slots<B1, Bn...>(), extra...) {
 #if !defined(__cpp_rtti) && !defined(__GXX_RTTI) && !defined(_CPPRTTI)
         static_assert(false,
                       "nanobind::mi::class_ requires RTTI (dynamic_cast/typeid).");
