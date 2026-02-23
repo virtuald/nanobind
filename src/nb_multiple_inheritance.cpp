@@ -31,9 +31,9 @@ static nb_type_cast_graph &nb_type_cast_graph_ref() {
     return graph;
 }
 
-void nb_type_register_cast(const std::type_info *src,
-                           const std::type_info *dst,
-                           void *(*cast)(void *)) noexcept {
+NB_CORE void nb_type_register_cast(const std::type_info *src,
+                                   const std::type_info *dst,
+                                   void *(*cast)(void *)) noexcept {
     check(src && dst && cast,
           "nanobind::detail::nb_type_register_cast(): invalid input!");
 

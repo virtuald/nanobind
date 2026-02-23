@@ -18,6 +18,11 @@ NAMESPACE_BEGIN(NB_NAMESPACE)
 
 NAMESPACE_BEGIN(detail)
 
+/// Register a directed C++ pointer cast edge from 'src' to 'dst'
+NB_CORE void nb_type_register_cast(
+    const std::type_info *src, const std::type_info *dst,
+    void *(*cast)(void *)) noexcept;
+
 struct mi_type_slots {
     object bases;
     PyType_Slot slots[2];

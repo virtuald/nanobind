@@ -362,11 +362,6 @@ NB_CORE bool nb_type_isinstance(PyObject *obj, const std::type_info *t) noexcept
 /// Search for the Python type object associated with a C++ type
 NB_CORE PyObject *nb_type_lookup(const std::type_info *t) noexcept;
 
-/// Register a directed C++ pointer cast edge from 'src' to 'dst'
-NB_CORE void nb_type_register_cast(
-    const std::type_info *src, const std::type_info *dst,
-    void *(*cast)(void *)) noexcept;
-
 /// Try to cast a C++ pointer from type 'src' to type 'dst' via a cast graph
 NB_CORE bool nb_type_apply_cast(const std::type_info *src,
                                 const std::type_info *dst,
