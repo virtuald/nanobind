@@ -75,6 +75,7 @@
 #include "nb_internals.cpp"
 #include "nb_func.cpp"
 #include "nb_type.cpp"
+#include "nb_multiple_inheritance.cpp"
 #include "nb_enum.cpp"
 #include "nb_ndarray.cpp"
 #include "nb_static_property.cpp"
