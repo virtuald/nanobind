@@ -16,7 +16,7 @@
 
 NAMESPACE_BEGIN(NB_NAMESPACE)
 
-namespace detail {
+NAMESPACE_BEGIN(detail)
 
 struct mi_type_slots {
     object bases;
@@ -74,9 +74,9 @@ NB_INLINE void mi_register_cast_pairs() {
     (mi_register_cast_pair<Derived, Bases>(), ...);
 }
 
-} // namespace detail
+NAMESPACE_END(detail)
 
-namespace mi {
+NAMESPACE_BEGIN(mi)
 
 /// Opt-in MI API (v1): include <nanobind/multiple_inheritance.h> and use
 /// nb::mi::class_. The default nb::class_ path is unchanged.
@@ -104,6 +104,6 @@ public:
     }
 };
 
-} // namespace mi
+NAMESPACE_END(mi)
 
 NAMESPACE_END(NB_NAMESPACE)
