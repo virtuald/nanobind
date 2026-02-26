@@ -1,5 +1,8 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/multiple_inheritance.h>
+#include <nanobind/stl/shared_ptr.h>
+
+#include <memory>
 
 namespace nb = nanobind;
 
@@ -19,11 +22,82 @@ struct MIB : MIRoot { };
 struct MIC : MIRoot { };
 struct MID : MIB, MIC { };
 
+struct A {
+    A() : x(0) { }
+    virtual ~A() = default;
+    const char *name() { return "A"; }
+    int x;
+};
+
+struct B : A {
+    B() : x(1) { }
+    const char *name() { return "B"; }
+    int x;
+};
+
+struct C : A {
+    C() : x(2) { }
+    virtual ~C() = default;
+    const char *name() { return "C"; }
+    int x;
+};
+
+struct D : B, C {
+    D() : x(3) { }
+    const char *name() { return "D"; }
+    int x;
+};
+
+struct MITrackedRoot {
+    virtual ~MITrackedRoot() = default;
+};
+
+struct MITrackedLeft : MITrackedRoot {
+    virtual ~MITrackedLeft() = default;
+};
+
+struct MITrackedRight : MITrackedRoot {
+    virtual ~MITrackedRight() = default;
+};
+
+struct MITrackedLeaf : MITrackedLeft, MITrackedRight {
+    MITrackedLeaf() {
+        constructed++;
+        alive++;
+    }
+
+    ~MITrackedLeaf() override {
+        destroyed++;
+        alive--;
+    }
+
+    static int constructed;
+    static int destroyed;
+    static int alive;
+};
+
+int MITrackedLeaf::constructed = 0;
+int MITrackedLeaf::destroyed = 0;
+int MITrackedLeaf::alive = 0;
+
+static std::shared_ptr<MITrackedLeaf> tracked_singleton;
+
+A take_a(const A &a) { return a; }
+B take_b(B &b) { return b; }
+C take_c(C *c) { return *c; }
+D take_d(D *const &d) { return *d; }
+D take_d_shared_ptr(std::shared_ptr<D> d) { return *d; }
+std::shared_ptr<A> d_factory() { return std::shared_ptr<B>(new D); }
+
 static void *identity_cast(void *ptr) noexcept { return ptr; }
 
 static MID *mid_singleton() {
     static MID v;
     return &v;
+}
+
+static std::shared_ptr<MITrackedLeaf> tracked_make_shared() {
+    return std::make_shared<MITrackedLeaf>();
 }
 
 NB_MODULE(test_multiple_inheritance_ext, m) {
@@ -81,6 +155,69 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
           nb::rv_policy::reference);
     m.def("as_c_view", []() -> MIC * { return static_cast<MIC *>(mid_singleton()); },
           nb::rv_policy::reference);
+
+    // Boost.Python m1.cpp-style multiple inheritance fixture
+    nb::mi::class_<A>(m, "A")
+        .def(nb::init<>())
+        .def("name", &A::name);
+
+    nb::mi::class_<B, A>(m, "B")
+        .def(nb::init<>())
+        .def("name", &B::name);
+
+    nb::mi::class_<C, A>(m, "C")
+        .def(nb::init<>())
+        .def("name", &C::name);
+
+    nb::mi::class_<D, nb::mi::bases<B, C>>(m, "D")
+        .def(nb::init<>())
+        .def("name", &D::name);
+
+    m.def("take_a", &take_a);
+    m.def("take_b", &take_b);
+    m.def("take_c", &take_c);
+    m.def("take_d", &take_d);
+    m.def("take_d_shared_ptr", &take_d_shared_ptr);
+    m.def("d_factory", &d_factory);
+
+    m.def("mi_lifetime_reset", []() {
+        MITrackedLeaf::constructed = 0;
+        MITrackedLeaf::destroyed = 0;
+        MITrackedLeaf::alive = 0;
+        tracked_singleton.reset();
+    });
+
+    m.def("mi_lifetime_stats", []() {
+        return nb::make_tuple(MITrackedLeaf::constructed,
+                              MITrackedLeaf::destroyed,
+                              MITrackedLeaf::alive);
+    });
+
+    nb::mi::class_<MITrackedRoot>(m, "MITrackedRoot");
+    nb::mi::class_<MITrackedLeft, MITrackedRoot>(m, "MITrackedLeft");
+    nb::mi::class_<MITrackedRight, MITrackedRoot>(m, "MITrackedRight");
+    nb::mi::class_<MITrackedLeaf, nb::mi::bases<MITrackedLeft, MITrackedRight>>(m,
+                                                                                 "MITrackedLeaf")
+        .def(nb::init<>());
+
+    m.def("mi_lifetime_make_shared", &tracked_make_shared);
+    m.def("mi_lifetime_as_left", [](std::shared_ptr<MITrackedLeaf> value) {
+        return std::static_pointer_cast<MITrackedLeft>(value);
+    });
+    m.def("mi_lifetime_as_right", [](std::shared_ptr<MITrackedLeaf> value) {
+        return std::static_pointer_cast<MITrackedRight>(value);
+    });
+    m.def("mi_lifetime_singleton_left", []() {
+        if (!tracked_singleton)
+            tracked_singleton = std::make_shared<MITrackedLeaf>();
+        return std::static_pointer_cast<MITrackedLeft>(tracked_singleton);
+    });
+    m.def("mi_lifetime_singleton_right", []() {
+        if (!tracked_singleton)
+            tracked_singleton = std::make_shared<MITrackedLeaf>();
+        return std::static_pointer_cast<MITrackedRight>(tracked_singleton);
+    });
+    m.def("mi_lifetime_release_singleton", []() { tracked_singleton.reset(); });
 
     m.def("shim_construct_and_call", []() {
         MIBase value;
