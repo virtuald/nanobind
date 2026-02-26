@@ -94,6 +94,52 @@ Instances expose fields and methods of both types as expected:
     >>> d.bark()
     'Molly: woof!'
 
+.. _multiple_inheritance_opt_in:
+
+Opt-in support for multiple inheritance
+---------------------------------------
+
+nanobind's first multiple-inheritance (MI) slice is opt-in. To enable it,
+include the MI shim header and use ``nb::mi::class_`` declarations.
+
+.. code-block:: cpp
+
+   #include <nanobind/multiple_inheritance.h>
+
+   namespace nb = nanobind;
+
+For single-base declarations under the shim, the syntax is unchanged except for
+``nb::mi::class_``.
+
+.. code-block:: cpp
+
+   nb::mi::class_<B, A>(m, "B");
+   nb::mi::class_<C, A>(m, "C");
+
+For classes with several direct bases, use ``nb::mi::bases<...>``.
+
+.. code-block:: cpp
+
+   nb::mi::class_<D, nb::mi::bases<B, C>>(m, "D");
+
+Base registration order matters:
+
+1. Bind base classes before any derived class that references them.
+2. For ``nb::mi::bases<B1, B2, ...>``, keep the base list in the same order as
+   the C++ declaration.
+
+The MI shim needs the base Python type objects during registration and will
+raise an error if a listed base type is not bound yet.
+
+Current limitations of this first MI slice:
+
+- Only ``public`` inheritance is supported.
+- RTTI must be enabled (the shim relies on ``typeid``/runtime type records).
+- Virtual inheritance is not supported yet.
+- Repeated/ambiguous base paths are not automatically disambiguated; prefer
+  explicit intermediate base types in function signatures when a root base can
+  be reached through multiple paths.
+
 .. _automatic_downcasting:
 
 Automatic downcasting
