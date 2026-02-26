@@ -28,12 +28,24 @@ NB_INLINE void register_cast() {
         });
 }
 
+template <typename Derived, typename Base>
+NB_INLINE void register_edge_casts() {
+    register_cast<Derived, Base>();
+    register_cast<Base, Derived>();
+}
+
 template <typename T, typename... Ts>
 class class_ : public ::nanobind::class_<T, Ts...> {
-    using Base = ::nanobind::class_<T, Ts...>;
+    using NbClass = ::nanobind::class_<T, Ts...>;
+    using DirectBase = typename NbClass::Base;
 
 public:
-    using Base::Base;
+    template <typename... Extra>
+    NB_INLINE class_(handle scope, const char *name, const Extra &... extra)
+        : NbClass(scope, name, extra...) {
+        if constexpr (!std::is_same_v<DirectBase, T>)
+            register_edge_casts<T, DirectBase>();
+    }
 };
 
 template <typename T, typename... Bases, typename... Ts>
@@ -66,7 +78,7 @@ public:
         : Base(scope, name,
                detail::type_bases_py((object) make_bases_tuple()),
                extra...) {
-        (register_cast<T, Bases>(), ...);
+        (register_edge_casts<T, Bases>(), ...);
     }
 };
 

@@ -1531,7 +1531,8 @@ bool nb_type_get(const std::type_info *cpp_type, PyObject *src, uint8_t flags,
         cpp_type_src = t->type;
 
         // Check if the source / destination typeid are an exact match
-        bool valid = cpp_type == cpp_type_src || *cpp_type == *cpp_type_src;
+        bool same_cpp_type = cpp_type == cpp_type_src || *cpp_type == *cpp_type_src;
+        bool valid = same_cpp_type;
 
         // If not, look up the Python type and check the inheritance chain
         if (NB_UNLIKELY(!valid)) {
@@ -1570,8 +1571,20 @@ bool nb_type_get(const std::type_info *cpp_type, PyObject *src, uint8_t flags,
                 return false;
             }
 
-            *out = inst_ptr(inst);
+            void *ptr = inst_ptr(inst);
 
+            if (NB_UNLIKELY(!same_cpp_type)) {
+                nb_type_cast_fn cast =
+                    nb_type_find_cast(cpp_type_src, cpp_type);
+
+                if (cast) {
+                    ptr = cast(ptr);
+                    if (NB_UNLIKELY(!ptr))
+                        return false;
+                }
+            }
+
+            *out = ptr;
             return true;
         }
     }
@@ -1887,13 +1900,24 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
         return true;
     };
 
+    void *value_p = value;
+
+    if (cpp_type_p && cpp_type_p != cpp_type) {
+        nb_type_cast_fn cast = nb_type_find_cast(cpp_type, cpp_type_p);
+        if (cast) {
+            value_p = cast(value_p);
+            if (!value_p)
+                return nullptr;
+        }
+    }
+
     if (rvp != rv_policy::copy) {
-        nb_shard &shard = internals_->shard(value);
+        nb_shard &shard = internals_->shard(value_p);
         lock_shard guard(shard);
 
         // Check if the instance is already registered with nanobind
         nb_ptr_map &inst_c2p = shard.inst_c2p;
-        nb_ptr_map::iterator it = inst_c2p.find(value);
+        nb_ptr_map::iterator it = inst_c2p.find(value_p);
 
         if (it != inst_c2p.end()) {
             void *entry = it->second;
@@ -1939,7 +1963,7 @@ PyObject *nb_type_put_p(const std::type_info *cpp_type,
     if (!lookup_type())
         return nullptr;
 
-    return nb_type_put_common(value, td_p ? td_p : td, rvp, cleanup, is_new);
+    return nb_type_put_common(value_p, td_p ? td_p : td, rvp, cleanup, is_new);
 }
 
 static void nb_type_put_unique_finalize(PyObject *o,
