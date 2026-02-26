@@ -197,6 +197,30 @@ using nb_type_map_fast = nb_ptr_map;
 using nb_type_map_slow = tsl::robin_map<const std::type_info *, type_data *,
                                         std_typeinfo_hash, std_typeinfo_eq>;
 
+struct nb_cast_key {
+    const std::type_info *src;
+    const std::type_info *dst;
+};
+
+struct nb_cast_key_hash {
+    size_t operator()(const nb_cast_key &k) const {
+        size_t h1 = std_typeinfo_hash()(k.src),
+               h2 = std_typeinfo_hash()(k.dst);
+        return h1 ^ (h2 + ((size_t) 0x9e3779b97f4a7c15ULL) + (h1 << 6) +
+                     (h1 >> 2));
+    }
+};
+
+struct nb_cast_key_eq {
+    bool operator()(const nb_cast_key &a, const nb_cast_key &b) const {
+        return std_typeinfo_eq()(a.src, b.src) &&
+               std_typeinfo_eq()(a.dst, b.dst);
+    }
+};
+
+using nb_cast_map = tsl::robin_map<nb_cast_key, nb_type_cast_fn,
+                                   nb_cast_key_hash, nb_cast_key_eq>;
+
 /// Convenience functions to deal with the pointer encoding in 'internals.inst_c2p'
 
 /// Does this entry store a linked list of instances?
@@ -390,6 +414,9 @@ struct nb_internals {
 
     /// C++ -> Python type map -- slow fallback version based on hashed strings
     nb_type_map_slow type_c2p_slow;
+
+    /// Optional C++ pointer cast map used by the MI shim
+    nb_cast_map type_c2c;
 
 #if !defined(NB_FREE_THREADED)
     /// nb_func/meth instance map for leak reporting (used as set, the value is unused)

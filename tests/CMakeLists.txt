@@ -81,6 +81,7 @@ set(TEST_NAMES
   issue
   intrusive
   thread
+  multiple_inheritance
 )
 
 foreach (NAME ${TEST_NAMES})
@@ -178,6 +179,7 @@ set(TEST_FILES
   test_typing.py
   test_thread.py
   test_specialization.py
+  test_multiple_inheritance.py
 
   # Stub reference files
   test_classes_ext.pyi.ref

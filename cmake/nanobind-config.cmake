@@ -156,6 +156,7 @@ function (nanobind_build_library TARGET_NAME)
     ${NB_DIR}/include/nanobind/nb_func.h
     ${NB_DIR}/include/nanobind/nb_lib.h
     ${NB_DIR}/include/nanobind/nb_misc.h
+    ${NB_DIR}/include/nanobind/multiple_inheritance.h
     ${NB_DIR}/include/nanobind/nb_python.h
     ${NB_DIR}/include/nanobind/nb_traits.h
     ${NB_DIR}/include/nanobind/nb_tuple.h
@@ -206,6 +207,7 @@ function (nanobind_build_library TARGET_NAME)
     ${NB_DIR}/src/error.cpp
     ${NB_DIR}/src/trampoline.cpp
     ${NB_DIR}/src/implicit.cpp
+    ${NB_DIR}/src/nb_multiple_inheritance.cpp
   )
 
   if (NB_FREE_THREADED)

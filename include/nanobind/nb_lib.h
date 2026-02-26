@@ -362,6 +362,18 @@ NB_CORE bool nb_type_isinstance(PyObject *obj, const std::type_info *t) noexcept
 /// Search for the Python type object associated with a C++ type
 NB_CORE PyObject *nb_type_lookup(const std::type_info *t) noexcept;
 
+/// C++ pointer cast callback used by nanobind::mi
+using nb_type_cast_fn = void *(*)(void *) noexcept;
+
+/// Register a C++ pointer cast function for a (src, dst) type pair
+NB_CORE void nb_type_register_cast(const std::type_info *src,
+                                   const std::type_info *dst,
+                                   nb_type_cast_fn fn);
+
+/// Query a C++ pointer cast function for a (src, dst) type pair
+NB_CORE nb_type_cast_fn nb_type_find_cast(const std::type_info *src,
+                                          const std::type_info *dst);
+
 /// Allocate an instance of type 't'
 NB_CORE PyObject *nb_inst_alloc(PyTypeObject *t);
 
