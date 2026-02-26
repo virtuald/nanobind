@@ -85,10 +85,13 @@ enum class type_init_flags : uint32_t {
     /// Is the 'base_py' field of the type_init_data structure set?
     has_base_py              = (1 << 22),
 
-    /// This type provides extra PyType_Slot fields
-    has_type_slots           = (1 << 23),
+    /// Is the 'bases_py' field of the type_init_data structure set?
+    has_bases_py             = (1 << 23),
 
-    all_init_flags           = (0x1f << 19)
+    /// This type provides extra PyType_Slot fields
+    has_type_slots           = (1 << 24),
+
+    all_init_flags           = (0x3f << 19)
 };
 
 // See internals.h
@@ -137,14 +140,26 @@ struct type_init_data : type_data {
     PyObject *scope;
     const std::type_info *base;
     PyTypeObject *base_py;
+    PyObject *bases_py;
     const char *doc;
     const PyType_Slot *type_slots;
     size_t supplement;
 };
 
+struct type_bases_py {
+    object value;
+    NB_INLINE explicit type_bases_py(object &&value)
+        : value(std::move(value)) { }
+};
+
 NB_INLINE void type_extra_apply(type_init_data &t, const handle &h) {
     t.flags |= (uint32_t) type_init_flags::has_base_py;
     t.base_py = (PyTypeObject *) h.ptr();
+}
+
+NB_INLINE void type_extra_apply(type_init_data &t, const type_bases_py &h) {
+    t.flags |= (uint32_t) type_init_flags::has_bases_py;
+    t.bases_py = h.value.ptr();
 }
 
 NB_INLINE void type_extra_apply(type_init_data &t, const char *doc) {

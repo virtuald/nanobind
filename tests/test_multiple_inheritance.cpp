@@ -11,6 +11,15 @@ struct MIBase {
 struct MIDerived : MIBase { };
 struct MIUnrelated { };
 
+struct MIRoot {
+    virtual ~MIRoot() = default;
+};
+
+struct MIB : MIRoot { };
+struct MIC : MIRoot { };
+
+struct MID : MIB, MIC { };
+
 static void *identity_cast(void *ptr) noexcept { return ptr; }
 
 NB_MODULE(test_multiple_inheritance_ext, m) {
@@ -40,6 +49,11 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
     nb::mi::class_<MIBase>(m, "MIBase")
         .def(nb::init<>())
         .def("value", [](const MIBase &self) { return self.value; });
+
+    nb::mi::class_<MIRoot>(m, "MIRoot").def(nb::init<>());
+    nb::mi::class_<MIB, MIRoot>(m, "MIB").def(nb::init<>());
+    nb::mi::class_<MIC, MIRoot>(m, "MIC").def(nb::init<>());
+    nb::mi::class_<MID, nb::mi::bases<MIB, MIC>>(m, "MID").def(nb::init<>());
 
     m.def("shim_construct_and_call", []() {
         MIBase value;

@@ -1054,6 +1054,7 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
     bool has_doc               = t->flags & (uint32_t) type_init_flags::has_doc,
          has_base              = t->flags & (uint32_t) type_init_flags::has_base,
          has_base_py           = t->flags & (uint32_t) type_init_flags::has_base_py,
+         has_bases_py          = t->flags & (uint32_t) type_init_flags::has_bases_py,
          has_type_slots        = t->flags & (uint32_t) type_init_flags::has_type_slots,
          has_supplement        = t->flags & (uint32_t) type_init_flags::has_supplement,
          has_dynamic_attr      = t->flags & (uint32_t) type_flags::has_dynamic_attr,
@@ -1116,54 +1117,34 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
     if (t->align > ptr_size)
         basicsize += t->align - ptr_size;
 
-    PyObject *base = nullptr;
+    PyObject *base = nullptr, *bases = nullptr;
+    type_data *tb = nullptr;
 
 #if !defined(PYPY_VERSION) // see https://github.com/pypy/pypy/issues/4914
     bool generic_base = false;
 #endif
-    if (has_base_py) {
-        check(!has_base,
-              "nanobind::detail::nb_type_new(\"%s\"): multiple base types "
-              "specified!", t_name);
-        base = (PyObject *) t->base_py;
 
-#if !defined(PYPY_VERSION) // see https://github.com/pypy/pypy/issues/4914
-        if (Py_TYPE(base) == &Py_GenericAliasType) {
-            base = PyObject_GetAttrString(base, "__origin__");
-            check(base != nullptr,
-                  "nanobind::detail::nb_type_new(\"%s\"): could not access base of type alias!", t_name);
-            Py_DECREF(base);
-            generic_base = true;
-        }
-#endif
-
-        check(nb_type_check(base),
+    auto process_base = [&](PyObject *base_i) {
+        check(nb_type_check(base_i),
               "nanobind::detail::nb_type_new(\"%s\"): base type is not a "
               "nanobind type!", t_name);
-    } else if (has_base) {
-        lock_internals guard(internals_);
-        nb_type_map_slow::iterator it2 = internals_->type_c2p_slow.find(t->base);
-        check(it2 != internals_->type_c2p_slow.end(),
-                  "nanobind::detail::nb_type_new(\"%s\"): base type \"%s\" not "
-                  "known to nanobind!", t_name, type_name(t->base));
-        base = (PyObject *) it2->second->type_py;
-    }
 
-    type_data *tb = nullptr;
-    if (base) {
-        // Check if the base type already has dynamic attributes
-        tb = nb_type_data((PyTypeObject *) base);
-        if (tb->flags & (uint32_t) type_flags::has_dynamic_attr)
+        type_data *tb_i = nb_type_data((PyTypeObject *) base_i);
+
+        if (!tb)
+            tb = tb_i;
+
+        if (tb_i->flags & (uint32_t) type_flags::has_dynamic_attr)
             has_dynamic_attr = true;
 
-        if (tb->flags & (uint32_t) type_flags::is_weak_referenceable)
+        if (tb_i->flags & (uint32_t) type_flags::is_weak_referenceable)
             is_weak_referenceable = true;
 
         /* Handle a corner case (base class larger than derived class)
            which can arise when extending trampoline base classes */
 
-        PyTypeObject *base_2 = (PyTypeObject *) base;
-        type_data *tb_2 = tb;
+        PyTypeObject *base_2 = (PyTypeObject *) base_i;
+        type_data *tb_2 = tb_i;
 
         do {
             size_t base_basicsize = sizeof(nb_inst) + tb_2->size;
@@ -1183,6 +1164,58 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
 
             tb_2 = nb_type_data(base_2);
         } while (true);
+    };
+
+    if (has_bases_py) {
+        check(!has_base && !has_base_py,
+              "nanobind::detail::nb_type_new(\"%s\"): multiple base type "
+              "specification mechanisms were provided!", t_name);
+
+        bases = t->bases_py;
+        check(PyTuple_CheckExact(bases),
+              "nanobind::detail::nb_type_new(\"%s\"): 'bases_py' must be "
+              "a tuple!", t_name);
+
+        size_t size = (size_t) NB_TUPLE_GET_SIZE(bases);
+        check(size > 0,
+              "nanobind::detail::nb_type_new(\"%s\"): 'bases_py' must be "
+              "non-empty!", t_name);
+
+        for (size_t i = 0; i < size; ++i) {
+            PyObject *base_i = NB_TUPLE_GET_ITEM(bases, i);
+            check(PyType_Check(base_i),
+                  "nanobind::detail::nb_type_new(\"%s\"): entry %zu of "
+                  "'bases_py' is not a Python type object!", t_name, i);
+            check(nb_type_check(base_i),
+                  "nanobind::detail::nb_type_new(\"%s\"): entry %zu of "
+                  "'bases_py' is not a nanobind type!", t_name, i);
+            process_base(base_i);
+        }
+    } else if (has_base_py) {
+        check(!has_base,
+              "nanobind::detail::nb_type_new(\"%s\"): multiple base types "
+              "specified!", t_name);
+        base = (PyObject *) t->base_py;
+
+#if !defined(PYPY_VERSION) // see https://github.com/pypy/pypy/issues/4914
+        if (Py_TYPE(base) == &Py_GenericAliasType) {
+            base = PyObject_GetAttrString(base, "__origin__");
+            check(base != nullptr,
+                  "nanobind::detail::nb_type_new(\"%s\"): could not access base of type alias!", t_name);
+            Py_DECREF(base);
+            generic_base = true;
+        }
+#endif
+
+        process_base(base);
+    } else if (has_base) {
+        lock_internals guard(internals_);
+        nb_type_map_slow::iterator it2 = internals_->type_c2p_slow.find(t->base);
+        check(it2 != internals_->type_c2p_slow.end(),
+                  "nanobind::detail::nb_type_new(\"%s\"): base type \"%s\" not "
+                  "known to nanobind!", t_name, type_name(t->base));
+        base = (PyObject *) it2->second->type_py;
+        process_base(base);
     }
 
     bool base_intrusive_ptr =
@@ -1208,7 +1241,9 @@ PyObject *nb_type_new(const type_init_data *t) noexcept {
         /* .slots = */ slots
     };
 
-    if (base)
+    if (bases)
+        *s++ = { Py_tp_bases, (void *) bases };
+    else if (base)
         *s++ = { Py_tp_base, (void *) base };
 
     *s++ = { Py_tp_init, (void *) inst_init };

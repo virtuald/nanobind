@@ -29,7 +29,46 @@ NB_INLINE void register_cast() {
 }
 
 template <typename T, typename... Ts>
-using class_ = ::nanobind::class_<T, Ts...>;
+class class_ : public ::nanobind::class_<T, Ts...> {
+    using Base = ::nanobind::class_<T, Ts...>;
+
+public:
+    using Base::Base;
+};
+
+template <typename T, typename... Bases, typename... Ts>
+class class_<T, bases<Bases...>, Ts...> : public ::nanobind::class_<T, Ts...> {
+    using Base = ::nanobind::class_<T, Ts...>;
+
+    static NB_INLINE tuple make_bases_tuple() {
+        constexpr size_t size = sizeof...(Bases);
+        static_assert(size > 0, "nanobind::mi::bases<> requires at least one base type.");
+
+        tuple result = steal<tuple>(PyTuple_New((Py_ssize_t) size));
+        if (!result.is_valid())
+            detail::raise_python_error();
+
+        size_t index = 0;
+        auto append = [&](handle h) {
+            if (!h.is_valid())
+                detail::raise("nanobind::mi::class_: attempted to reference an unbound base type!");
+            Py_INCREF(h.ptr());
+            NB_TUPLE_SET_ITEM(result.ptr(), (Py_ssize_t) index++, h.ptr());
+        };
+
+        (append(type<Bases>()), ...);
+        return result;
+    }
+
+public:
+    template <typename... Extra>
+    NB_INLINE class_(handle scope, const char *name, const Extra &... extra)
+        : Base(scope, name,
+               detail::type_bases_py((object) make_bases_tuple()),
+               extra...) {
+        (register_cast<T, Bases>(), ...);
+    }
+};
 
 NAMESPACE_END(mi)
 NAMESPACE_END(NB_NAMESPACE)

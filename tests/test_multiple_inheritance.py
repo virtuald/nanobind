@@ -21,3 +21,18 @@ def test_smoke_shim_does_not_change_non_mi_behavior():
     obj = t.MIBase()
     assert obj.value() == 123
     assert t.shim_construct_and_call() == 123
+
+
+def test_python_mi_isinstance_and_issubclass():
+    d = t.MID()
+    assert isinstance(d, t.MIB)
+    assert isinstance(d, t.MIC)
+    assert issubclass(t.MID, t.MIB)
+    assert issubclass(t.MID, t.MIC)
+
+
+def test_python_mi_mro_contains_all_bases():
+    mro = t.MID.__mro__
+    assert mro[0] is t.MID
+    assert t.MIB in mro
+    assert t.MIC in mro
