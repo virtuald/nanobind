@@ -73,6 +73,9 @@ enum class type_flags : uint32_t {
 /// for more efficient memory layout, but could move elsewhere if we run
 /// out of flags.
 enum class type_init_flags : uint32_t {
+    /// Is the 'bases_py' field of the type_init_data structure set?
+    has_bases_py             = (1 << 18),
+
     /// Is the 'supplement' field of the type_init_data structure set?
     has_supplement           = (1 << 19),
 
@@ -85,13 +88,10 @@ enum class type_init_flags : uint32_t {
     /// Is the 'base_py' field of the type_init_data structure set?
     has_base_py              = (1 << 22),
 
-    /// Is the 'bases_py' field of the type_init_data structure set?
-    has_bases_py             = (1 << 23),
-
     /// This type provides extra PyType_Slot fields
-    has_type_slots           = (1 << 24),
+    has_type_slots           = (1 << 23),
 
-    all_init_flags           = (0x3f << 19)
+    all_init_flags           = (0x3f << 18)
 };
 
 // See internals.h

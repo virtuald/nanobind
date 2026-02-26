@@ -22,28 +22,28 @@ struct MIB : MIRoot { };
 struct MIC : MIRoot { };
 struct MID : MIB, MIC { };
 
-struct A {
-    A() : x(0) { }
-    virtual ~A() = default;
+struct MIA {
+    MIA() : x(0) { }
+    virtual ~MIA() = default;
     const char *name() { return "A"; }
     int x;
 };
 
-struct B : A {
-    B() : x(1) { }
+struct MIBoost : MIA {
+    MIBoost() : x(1) { }
     const char *name() { return "B"; }
     int x;
 };
 
-struct C : A {
-    C() : x(2) { }
-    virtual ~C() = default;
+struct MICBoost : MIA {
+    MICBoost() : x(2) { }
+    virtual ~MICBoost() = default;
     const char *name() { return "C"; }
     int x;
 };
 
-struct D : B, C {
-    D() : x(3) { }
+struct MIDBoost : MIBoost, MICBoost {
+    MIDBoost() : x(3) { }
     const char *name() { return "D"; }
     int x;
 };
@@ -82,12 +82,12 @@ int MITrackedLeaf::alive = 0;
 
 static std::shared_ptr<MITrackedLeaf> tracked_singleton;
 
-A take_a(const A &a) { return a; }
-B take_b(B &b) { return b; }
-C take_c(C *c) { return *c; }
-D take_d(D *const &d) { return *d; }
-D take_d_shared_ptr(std::shared_ptr<D> d) { return *d; }
-std::shared_ptr<A> d_factory() { return std::shared_ptr<B>(new D); }
+MIA take_a(const MIA &a) { return a; }
+MIBoost take_b(MIBoost &b) { return b; }
+MICBoost take_c(MICBoost *c) { return *c; }
+MIDBoost take_d(MIDBoost *const &d) { return *d; }
+MIDBoost take_d_shared_ptr(std::shared_ptr<MIDBoost> d) { return *d; }
+std::shared_ptr<MIA> d_factory() { return std::shared_ptr<MIBoost>(new MIDBoost); }
 
 static void *identity_cast(void *ptr) noexcept { return ptr; }
 
@@ -157,21 +157,21 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
           nb::rv_policy::reference);
 
     // Boost.Python m1.cpp-style multiple inheritance fixture
-    nb::mi::class_<A>(m, "A")
+    nb::mi::class_<MIA>(m, "A")
         .def(nb::init<>())
-        .def("name", &A::name);
+        .def("name", &MIA::name);
 
-    nb::mi::class_<B, A>(m, "B")
+    nb::mi::class_<MIBoost, MIA>(m, "B")
         .def(nb::init<>())
-        .def("name", &B::name);
+        .def("name", &MIBoost::name);
 
-    nb::mi::class_<C, A>(m, "C")
+    nb::mi::class_<MICBoost, MIA>(m, "C")
         .def(nb::init<>())
-        .def("name", &C::name);
+        .def("name", &MICBoost::name);
 
-    nb::mi::class_<D, nb::mi::bases<B, C>>(m, "D")
+    nb::mi::class_<MIDBoost, nb::mi::bases<MIBoost, MICBoost>>(m, "D")
         .def(nb::init<>())
-        .def("name", &D::name);
+        .def("name", &MIDBoost::name);
 
     m.def("take_a", &take_a);
     m.def("take_b", &take_b);
