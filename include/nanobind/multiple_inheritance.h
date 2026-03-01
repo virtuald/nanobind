@@ -16,6 +16,14 @@ NAMESPACE_BEGIN(mi)
 
 template <typename... Ts> struct bases { };
 
+template <typename Src, typename Dst, typename = void>
+struct is_static_ptr_castable : std::false_type { };
+
+template <typename Src, typename Dst>
+struct is_static_ptr_castable<
+    Src, Dst,
+    std::void_t<decltype(static_cast<Dst *>((Src *) nullptr))>> : std::true_type { };
+
 template <typename Src, typename Dst>
 NB_INLINE void register_cast() {
     using SrcT = std::remove_cv_t<std::remove_reference_t<Src>>;
@@ -24,7 +32,15 @@ NB_INLINE void register_cast() {
     detail::nb_type_register_cast(
         &typeid(SrcT), &typeid(DstT),
         [](void *ptr) noexcept -> void * {
-            return static_cast<DstT *>(static_cast<SrcT *>(ptr));
+            SrcT *src = static_cast<SrcT *>(ptr);
+
+            if constexpr (is_static_ptr_castable<SrcT, DstT>::value) {
+                return static_cast<DstT *>(src);
+            } else if constexpr (std::is_polymorphic_v<SrcT>) {
+                return dynamic_cast<DstT *>(src);
+            } else {
+                return nullptr;
+            }
         });
 }
 

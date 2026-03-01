@@ -1,6 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/multiple_inheritance.h>
 #include <nanobind/stl/shared_ptr.h>
+#include <nanobind/trampoline.h>
 
 #include <memory>
 
@@ -21,6 +22,24 @@ struct MIRoot {
 struct MIB : MIRoot { };
 struct MIC : MIRoot { };
 struct MID : MIB, MIC { };
+
+struct P {
+    virtual ~P() = default;
+    virtual const char *f() = 0;
+    const char *g() { return "P::g()"; }
+};
+
+struct PyP : P {
+    NB_TRAMPOLINE(P, 1);
+
+    const char *f() override {
+        NB_OVERRIDE_PURE(f);
+    }
+};
+
+struct Q : virtual P {
+    const char *f() override { return "Q::f()"; }
+};
 
 struct MIA {
     MIA() : x(0) { }
@@ -155,6 +174,17 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
           nb::rv_policy::reference);
     m.def("as_c_view", []() -> MIC * { return static_cast<MIC *>(mid_singleton()); },
           nb::rv_policy::reference);
+
+    // Boost.Python polymorphism2.cpp virtual inheritance fixture
+    nb::mi::class_<P, PyP>(m, "P")
+        .def(nb::init<>())
+        .def("f", &P::f)
+        .def("g", &P::g);
+
+    nb::mi::class_<Q, nb::mi::bases<P>>(m, "Q")
+        .def(nb::init<>())
+        .def("f", &Q::f)
+        .def("g", &P::g);
 
     // Boost.Python m1.cpp-style multiple inheritance fixture
     nb::mi::class_<MIA>(m, "A")

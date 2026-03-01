@@ -181,10 +181,21 @@ def test_mi_lifetime_regression_multi_base_views_release_once(mi_lifetime_clean)
     assert t.mi_lifetime_stats() == (1, 1, 0)
 
 
-@pytest.mark.xfail(reason="Virtual inheritance in MI shim is out-of-scope in v1")
-def test_virtual_inheritance_out_of_scope_v1():
-    # Mirrors Boost.Python polymorphism2.py::test_pure_virtual coverage note:
-    # Q : virtual P interaction is intentionally deferred in the first MI slice.
+def test_virtual_inheritance_pure_virtual_and_override():
     p = t.P()
     with pytest.raises(RuntimeError):
         p.f()
+
+    q = t.Q()
+    assert q.f() == "Q::f()"
+    assert q.g() == "P::g()"
+
+    class R(t.P):
+        def __init__(self):
+            super().__init__()
+
+        def f(self):
+            return "R::f()"
+
+    r = R()
+    assert r.f() == "R::f()"
