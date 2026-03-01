@@ -50,29 +50,68 @@ NB_INLINE void register_edge_casts() {
     register_cast<Base, Derived>();
 }
 
-template <typename T, typename... Ts>
-class class_ : public ::nanobind::class_<T, Ts...> {
-    using NbClass = ::nanobind::class_<T, Ts...>;
-    using DirectBase = typename NbClass::Base;
+namespace mi_detail {
 
-public:
-    template <typename... Extra>
-    NB_INLINE class_(handle scope, const char *name, const Extra &... extra)
-        : NbClass(scope, name, extra...) {
-        if constexpr (!std::is_same_v<DirectBase, T>)
-            register_edge_casts<T, DirectBase>();
-    }
+template <typename T, typename... Ts>
+constexpr size_t base_count_v = (0 + ... + (std::is_base_of_v<Ts, T> ? 1u : 0u));
+
+template <typename T, typename... Ts>
+constexpr size_t alias_count_v = (0 + ... + (std::is_base_of_v<T, Ts> ? 1u : 0u));
+
+template <typename T, typename Alias>
+struct class_with_optional_alias {
+    using type = ::nanobind::class_<T, Alias>;
 };
 
-template <typename T, typename... Bases, typename... Ts>
-class class_<T, bases<Bases...>, Ts...> : public ::nanobind::class_<T, Ts...> {
-    using Base = ::nanobind::class_<T, Ts...>;
+template <typename T>
+struct class_with_optional_alias<T, T> {
+    using type = ::nanobind::class_<T>;
+};
+
+template <typename T, bool Multi, typename... Ts>
+struct class_selector;
+
+template <typename T, typename... Ts>
+struct class_selector<T, false, Ts...> {
+    using type = ::nanobind::class_<T, Ts...>;
+};
+
+template <typename T, typename... Ts>
+struct class_selector<T, true, Ts...> {
+    using Alias = typename ::nanobind::detail::extract<
+        T, ::nanobind::detail::is_alias, Ts...>::type;
+
+    using type = typename class_with_optional_alias<T, Alias>::type;
+};
+
+} // namespace mi_detail
+
+template <typename T, typename... Ts>
+class class_
+    : public mi_detail::class_selector<
+          T,
+          (mi_detail::base_count_v<T, Ts...> >= 2),
+          Ts...>::type {
+    static constexpr size_t BaseCount = mi_detail::base_count_v<T, Ts...>;
+    static constexpr size_t AliasCount = mi_detail::alias_count_v<T, Ts...>;
+    static constexpr bool HasMultipleBases = BaseCount >= 2;
+
+    using NbClass = typename mi_detail::class_selector<T, HasMultipleBases, Ts...>::type;
+    using DirectBase = typename NbClass::Base;
+
+    static_assert(
+        AliasCount <= 1,
+        "nanobind::mi::class_<> accepts at most one alias (trampoline) type.");
+
+    static_assert(
+        BaseCount + AliasCount == sizeof...(Ts),
+        "nanobind::mi::class_<> was invoked with extra arguments that could not be handled");
 
     static NB_INLINE tuple make_bases_tuple() {
-        constexpr size_t size = sizeof...(Bases);
-        static_assert(size > 0, "nanobind::mi::bases<> requires at least one base type.");
+        static_assert(HasMultipleBases,
+                      "nanobind::mi::class_::make_bases_tuple() should only be used for MI bindings.");
 
-        tuple result = steal<tuple>(PyTuple_New((Py_ssize_t) size));
+        tuple result = steal<tuple>(PyTuple_New((Py_ssize_t) BaseCount));
         if (!result.is_valid())
             detail::raise_python_error();
 
@@ -84,17 +123,33 @@ class class_<T, bases<Bases...>, Ts...> : public ::nanobind::class_<T, Ts...> {
             NB_TUPLE_SET_ITEM(result.ptr(), (Py_ssize_t) index++, h.ptr());
         };
 
-        (append(type<Bases>()), ...);
+        ((std::is_base_of_v<Ts, T> ? append(type<Ts>()) : (void) 0), ...);
+
         return result;
     }
 
+    template <typename U>
+    static NB_INLINE void register_edge_cast_if_base() {
+        if constexpr (std::is_base_of_v<U, T>)
+            register_edge_casts<T, U>();
+    }
+
 public:
-    template <typename... Extra>
+    template <typename... Extra, bool B = HasMultipleBases,
+              std::enable_if_t<!B, int> = 0>
     NB_INLINE class_(handle scope, const char *name, const Extra &... extra)
-        : Base(scope, name,
-               detail::type_bases_py((object) make_bases_tuple()),
-               extra...) {
-        (register_edge_casts<T, Bases>(), ...);
+        : NbClass(scope, name, extra...) {
+        if constexpr (!std::is_same_v<DirectBase, T>)
+            register_edge_casts<T, DirectBase>();
+    }
+
+    template <typename... Extra, bool B = HasMultipleBases,
+              std::enable_if_t<B, int> = 0>
+    NB_INLINE class_(handle scope, const char *name, const Extra &... extra)
+        : NbClass(scope, name,
+                  detail::type_bases_py((object) make_bases_tuple()),
+                  extra...) {
+        (register_edge_cast_if_base<Ts>(), ...);
     }
 };
 

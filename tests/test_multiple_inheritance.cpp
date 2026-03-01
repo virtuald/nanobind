@@ -150,7 +150,7 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
     nb::mi::class_<MIRoot>(m, "MIRoot").def(nb::init<>());
     nb::mi::class_<MIB, MIRoot>(m, "MIB").def(nb::init<>());
     nb::mi::class_<MIC, MIRoot>(m, "MIC").def(nb::init<>());
-    nb::mi::class_<MID, nb::mi::bases<MIB, MIC>>(m, "MID").def(nb::init<>());
+    nb::mi::class_<MID, MIB, MIC>(m, "MID").def(nb::init<>());
 
     m.def("mid_base_addresses", [](MID &d) {
         return nb::make_tuple(
@@ -181,7 +181,7 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
         .def("f", &P::f)
         .def("g", &P::g);
 
-    nb::mi::class_<Q, nb::mi::bases<P>>(m, "Q")
+    nb::mi::class_<Q, P>(m, "Q")
         .def(nb::init<>())
         .def("f", &Q::f)
         .def("g", &P::g);
@@ -199,7 +199,7 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
         .def(nb::init<>())
         .def("name", &MICBoost::name);
 
-    nb::mi::class_<MIDBoost, nb::mi::bases<MIBoost, MICBoost>>(m, "D")
+    nb::mi::class_<MIDBoost, MIBoost, MICBoost>(m, "D")
         .def(nb::init<>())
         .def("name", &MIDBoost::name);
 
@@ -226,8 +226,8 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
     nb::mi::class_<MITrackedRoot>(m, "MITrackedRoot");
     nb::mi::class_<MITrackedLeft, MITrackedRoot>(m, "MITrackedLeft");
     nb::mi::class_<MITrackedRight, MITrackedRoot>(m, "MITrackedRight");
-    nb::mi::class_<MITrackedLeaf, nb::mi::bases<MITrackedLeft, MITrackedRight>>(m,
-                                                                                 "MITrackedLeaf")
+    nb::mi::class_<MITrackedLeaf, MITrackedLeft, MITrackedRight>(m,
+                                                                  "MITrackedLeaf")
         .def(nb::init<>());
 
     m.def("mi_lifetime_make_shared", &tracked_make_shared);

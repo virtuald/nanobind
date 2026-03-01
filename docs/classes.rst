@@ -116,17 +116,18 @@ For single-base declarations under the shim, the syntax is unchanged except for
    nb::mi::class_<B, A>(m, "B");
    nb::mi::class_<C, A>(m, "C");
 
-For classes with several direct bases, use ``nb::mi::bases<...>``.
+For classes with several direct bases, list those bases as extra template
+arguments to ``nb::mi::class_``.
 
 .. code-block:: cpp
 
-   nb::mi::class_<D, nb::mi::bases<B, C>>(m, "D");
+   nb::mi::class_<D, B, C>(m, "D");
 
 Base registration order matters:
 
 1. Bind base classes before any derived class that references them.
-2. For ``nb::mi::bases<B1, B2, ...>``, keep the base list in the same order as
-   the C++ declaration.
+2. For ``nb::mi::class_<T, B1, B2, ...>``, keep the base list in the same
+   order as the C++ declaration.
 
 The MI shim needs the base Python type objects during registration and will
 raise an error if a listed base type is not bound yet.
