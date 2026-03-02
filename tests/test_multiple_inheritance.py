@@ -182,5 +182,19 @@ def test_multiple_inheritance_python_deferred_v1():
     pytest.skip("v1 limitation: no Python-defined MI across multiple nanobind extension bases")
 
 
-def test_multiple_inheritance_virtbase_deferred_v1():
-    pytest.skip("v1 limitation: no virtual inheritance support")
+def test_virtual_inheritance_virtbase():
+    class VBase12Py(t.VBase12):
+        def __init__(self, i, j):
+            t.VBase12.__init__(self, i, j)
+
+    obj = VBase12Py(3, 4)
+    assert obj.bar() == 4
+    assert t.vbase2_bar(obj) == 4
+    assert t.vbase2_bar_sharedptr(obj) == 4
+
+
+def test_virtual_inheritance_dynamic_type_return():
+    obj = t.new_vschild_as_vsbase()
+    assert type(obj) is t.VSChild
+    assert obj.x == 41
+    assert obj.y == 42

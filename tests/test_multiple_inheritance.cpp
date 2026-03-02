@@ -113,6 +113,42 @@ struct I801E : I801D {
     virtual ~I801E() = default;
 };
 
+// Virtual inheritance fixture adapted from pybind11's virtbase case
+struct VBase1 {
+    explicit VBase1(int i) : i(i) { }
+    virtual ~VBase1() = default;
+    int foo() const { return i; }
+    int i;
+};
+
+struct VBase2 {
+    explicit VBase2(int i) : i(i) { }
+    virtual ~VBase2() = default;
+    int bar() const { return i; }
+    int i;
+};
+
+struct VBase12 : virtual VBase1, VBase2 {
+    VBase12(int i, int j) : VBase1(i), VBase2(j) { }
+    virtual ~VBase12() = default;
+};
+
+struct VSBase {
+    explicit VSBase(int x = 0) : x(x) { }
+    virtual ~VSBase() = default;
+    int get_x() const { return x; }
+
+    int x;
+};
+
+struct VSChild : virtual VSBase {
+    explicit VSChild(int x = 0, int y = 0) : VSBase(x), y(y) { }
+    virtual ~VSChild() = default;
+    int get_y() const { return y; }
+
+    int y;
+};
+
 NB_MODULE(test_multiple_inheritance_ext, m) {
     nb::class_<Base1>(m, "Base1")
         .def(nb::init<>())
@@ -230,4 +266,36 @@ NB_MODULE(test_multiple_inheritance_ext, m) {
               return static_cast<I801B2 *>(&e);
           },
           nb::rv_policy::reference);
+
+    nb::class_<VBase1>(m, "VBase1")
+        .def(nb::init<int>())
+        .def("foo", &VBase1::foo);
+
+    nb::class_<VBase2>(m, "VBase2")
+        .def(nb::init<int>())
+        .def("bar", &VBase2::bar);
+
+    // Intentionally omit VBase1 from the binding declaration: implicit casts
+    // must still correctly adjust pointers for the virtual base layout.
+    nb::mi::class_<VBase12, VBase2>(m, "VBase12")
+        .def(nb::init<int, int>());
+
+    m.def("vbase2_bar", [](VBase2 *b) { return b->bar(); });
+    m.def("vbase2_bar_sharedptr", [](const std::shared_ptr<VBase2> &b) {
+        return b->bar();
+    });
+
+    nb::class_<VSBase>(m, "VSBase")
+        .def(nb::init<int>(), nb::arg("x") = 0)
+        .def_prop_ro("x", &VSBase::get_x);
+
+    // Virtual inheritance with a single listed base: this should still
+    // correctly identify and cast dynamic derived instances.
+    nb::class_<VSChild, VSBase>(m, "VSChild")
+        .def(nb::init<int, int>(), nb::arg("x") = 0, nb::arg("y") = 0)
+        .def_prop_ro("y", &VSChild::get_y);
+
+    m.def("new_vschild_as_vsbase", []() -> VSBase * {
+        return new VSChild(41, 42);
+    });
 }

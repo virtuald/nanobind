@@ -623,6 +623,24 @@ public:
         (type_extra_apply(d, extra), ...);
 
         m_ptr = detail::nb_type_new(&d);
+
+        if constexpr (!std::is_same_v<Base, T>) {
+            detail::nb_type_register_cast(
+                &typeid(T), &typeid(Base),
+                [](void *p) -> void * {
+                    return (void *) static_cast<Base *>((T *) p);
+                });
+
+#if defined(__cpp_rtti) || defined(__GXX_RTTI) || defined(_CPPRTTI)
+            if constexpr (std::is_polymorphic_v<T> && std::is_polymorphic_v<Base>) {
+                detail::nb_type_register_cast(
+                    &typeid(Base), &typeid(T),
+                    [](void *p) -> void * {
+                        return (void *) dynamic_cast<T *>((Base *) p);
+                    });
+            }
+#endif
+        }
     }
 
     template <typename Func, typename... Extra>
